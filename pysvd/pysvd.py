@@ -32,7 +32,7 @@ def truncate_svd_factors_n_largest_frac(u, s, v, n=True):
 
     if n > 1.0 or n <= 0.0:
         raise PySVDValueError("frac is too large, must be (0, 1]")
-    vals_to_keep = min(len(s) * n, 1)
+    vals_to_keep = max(int(len(s) * n), 1)
     return truncate_svd_factors_n_largest(u, s, v, vals_to_keep)
 
 def compose_svd_factors(u, s, v):
@@ -100,7 +100,7 @@ def main(input, output, colorspace, nlarge, fraclarge):
         band = bands[i]
         factors = svd(band)
         trunced = func(*factors, n=n)
-        bands[i] = compose_svd_factors(*trunced).astype(np.uint8)
+        bands[i] = compose_svd_factors(*trunced).astype(colorspace_obj.np_dtype)
 
     if len(bands) > 1:
         bands = np.dstack(bands)
