@@ -1,7 +1,4 @@
 *.pyc
 .ve
 *.egg-info
-*.png
-*.gif
-*.jpeg
-*.jpg
+imgs
