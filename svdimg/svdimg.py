@@ -1,4 +1,5 @@
 import logging
+import math
 import functools
 import operator
 
@@ -42,6 +43,34 @@ def truncate_svd_factors_n_largest_frac(u, s, v, n=True):
     vals_to_keep = max(int(len(s) * n), 1)
     logger.info('full rank * %f == rank %d', n, vals_to_keep)
     return truncate_svd_factors_n_largest(u, s, v, vals_to_keep)
+
+def find_n_that_equalizes_values(image_shape):
+    """For an image of height h and width w, h*w is the number of values in
+    this image. A truncated SVD decomposition to rank n of this image will
+    produce matrixes of the following sizes: (h,n), (n,1), (n,w), respectively
+    the left-singular vector matrix, the singular values (later made into a
+    rectangular identity matrix), and the right-singular vector matrix. Summing
+    the values of the SVD matrixes is:
+        h*n + n + n*w = n(h + 1 + w)
+
+    Therefore, for an SVD to be more efficient in storage than the original
+    image, the following must be true
+
+        n(h + 1 + w) < h*w
+        or
+        n < h*w / (h + 1 + w)
+
+    Note that savings are easiest to obtain when h = w (the image is square).
+    For square-ier images, a higher rank can be specified (which improves image
+    quality) and still beat h*w.  Conversely, very rectangular images require
+    very low ranks (poor quality) to beat h*w in values stored.
+
+    This function produces the minimum rank needed, integer floored, to beat
+    h*w in values stored of an SVD decomposition."""
+
+    h, w = image_shape
+
+    return math.floor(h * w / (h + 1 + w)
 
 def compose_svd_factors(u, s, v):
     sing_matrix = np.diag(s)
