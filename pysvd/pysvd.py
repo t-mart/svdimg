@@ -100,7 +100,9 @@ def main(input, output, colorspace, nlarge, fraclarge):
         band = bands[i]
         factors = svd(band)
         trunced = func(*factors, n=n)
-        bands[i] = compose_svd_factors(*trunced).astype(colorspace_obj.np_dtype)
+        bands[i] = compose_svd_factors(*trunced)
+        np.clip(bands[i], 0.0, 255.0, bands[i]) #since truncated-SVD is an approximation, some values may escape the 0-255 interval
+        bands[i] = bands[i].astype(np.uint8)
 
     if len(bands) > 1:
         bands = np.dstack(bands)
