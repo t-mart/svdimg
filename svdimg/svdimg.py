@@ -70,7 +70,7 @@ def find_n_that_equalizes_values(image_shape):
 
     h, w = image_shape
 
-    return math.floor(h * w / (h + 1 + w)
+    return math.floor(h * w / (h + 1 + w))
 
 def compose_svd_factors(u, s, v):
     sing_matrix = np.diag(s)
@@ -82,21 +82,31 @@ def compose_svd_factors(u, s, v):
     return np.dot(u, np.dot(sing_matrix, v))
 
 class Colorspace:
-    def __init__(self, name, np_dtype, desc):
-        self.name, self.np_dtype, self.desc = name, np_dtype, desc
+    def __init__(self, name, np_dtype, clip_interval, desc):
+        self.name, self.np_dtype, self.desc, self.clip_interval = name, np_dtype, desc, clip_interval
 
 colorspaces = [
-    Colorspace('1', np.dtype('b'), '1-bit pixels, black and white, stored with one pixel per byte'),
-    Colorspace('L', np.dtype('i'), '8-bit pixels, black and white'),
+    Colorspace('L', np.uint8, (0, 255), '8-bit pixels, black and white'),
+    Colorspace('RGB', np.uint8, (0, 255), '3x8-bit pixels, true color'),
+    Colorspace('RGBA', np.uint8, (0, 255), '4x8-bit pixels, true color with transparency mask'),
+    Colorspace('CMYK', np.uint8, (0, 255), '4x8-bit pixels, color separation'),
+    Colorspace('YCbCr', np.uint8, (0, 255), '3x8-bit pixels, color video format'),
+    Colorspace('LAB', np.uint8, (0, 255), '3x8-bit pixels, the L*a*b color space'),
+    Colorspace('HSV', np.uint8, (0, 255), '3x8-bit pixels, Hue, Saturation, Value color space'),
+
+    #unsupported PIL modes!
+    #======================
     #Colorspace('P', '8-bit pixels, mapped to any other mode using a color palette'),
-    Colorspace('RGB', np.dtype('i'), '3x8-bit pixels, true color'),
-    Colorspace('RGBA', np.dtype('i'), '4x8-bit pixels, true color with transparency mask'),
-    Colorspace('CMYK', np.dtype('i'), '4x8-bit pixels, color separation'),
-    Colorspace('YCbCr', np.dtype('i'), '3x8-bit pixels, color video format'),
-    Colorspace('LAB', np.dtype('i'), '3x8-bit pixels, the L*a*b color space'),
-    Colorspace('HSV', np.dtype('i'), '3x8-bit pixels, Hue, Saturation, Value color space'),
-    Colorspace('I', np.dtype('i4'), '32-bit signed integer pixels'),
-    Colorspace('F', np.dtype('f4'), '32-bit floating point pixels'),
+    #not going to support something that requires a palette argument
+
+    # Colorspace('1', bool, False, '1-bit pixels, black and white, stored with one pixel per byte'),
+    # probably a symptom of how SVD works on column/rows, while 1-bit color
+    # depth works on radial B/W density, but 1-bit produces unmeaningful
+    # results.
+
+    # Colorspace('I', np.dtype('i4'), (0, 2**(32)), '32-bit signed integer pixels'),
+    # Colorspace('F', np.dtype('f4'), False, '32-bit floating point pixels'),
+    # some error "OSError: cannot write mode I as JPEG", same with F. scrap em'!
 ]
 
 colorspaces_by_name = { cs.name:cs for cs in colorspaces }
@@ -139,7 +149,7 @@ def main(input, output, colorspace, nlarge, fraclarge, verbose):
         n = smaller_dim
 
     logger.info('representing image as matrix')
-    bands = np.asarray(image)
+    bands = np.asarray(image).astype(colorspace_obj.np_dtype)
 
     if bands.ndim > 2:
         logger.info('splitting image channels into separate matrixes %s', str(image_band_names))
@@ -160,10 +170,14 @@ def main(input, output, colorspace, nlarge, fraclarge, verbose):
         band_sizes.append([m.shape for m in trunced])
         logger.info('band[%s] multiplying factors back together', name)
         bands[i] = compose_svd_factors(*trunced)
+        # print(bands[i][0])
         logger.info('band[%s] clipping color values to 0-255 interval', name)
-        np.clip(bands[i], 0.0, 255.0, bands[i]) #since truncated-SVD is an approximation, some values may escape the 0-255 interval
+        if colorspace_obj.clip_interval:
+            print(colorspace_obj.clip_interval)
+            l, h = colorspace_obj.clip_interval
+            np.clip(bands[i], l, h, bands[i]) #since truncated-SVD is an approximation, some values may escape the 0-255 interval
         logger.info('band[%s] converting color values to uint8\'s', name)
-        bands[i] = bands[i].astype(np.uint8)
+        bands[i] = bands[i].astype(colorspace_obj.np_dtype)
 
     if len(bands) > 1:
         logger.info('merging bands back together')
@@ -189,6 +203,4 @@ def main(input, output, colorspace, nlarge, fraclarge, verbose):
     logger.info('svd image values:')
     logger.info('\t%d =  %s', svd_vals, band_stat_str)
     logger.info('svd_vals = %.4f * original_vals', float(svd_vals)/orig_vals)
-    # to see a decrease in values of the svd, the prescribed rank n must be
-    # less than (height*width)/(height+width+1)
 
