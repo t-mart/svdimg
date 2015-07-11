@@ -43,7 +43,6 @@ colorspaces = [
                                             'space'),
     Colorspace('HSV',   np.uint8, (0, 255), '3x8-bit pixels, Hue, Saturation, '
                                             'Value color space'),
-
     #unsupported PIL modes!
     #======================
     #Colorspace('P', '8-bit pixels, mapped to any other mode using a color palette'),
@@ -62,69 +61,55 @@ colorspaces = [
 colorspaces_by_name = { cs.name:cs for cs in colorspaces }
 
 def truncate_svd_factors(u, s, v, rank):
-    '''Returns the factors of an SVD u, s, v to rank n. Specifically, u is
-    truncated to n columns, s to n singular values, and v to n rows.'''
-
+    """Returns the factors of an SVD u, s, v to rank r. Specifically, u is
+    truncated to rank columns, s to rank singular values, and v to rank rows."""
     u_trunc = u[...,:rank] # remove columns after rank
     s_trunc = s[...,:rank] # remove singular vals after rank
     v_trunc = v[...,:rank,...] # remove rows after rank
-
     return u_trunc, s_trunc, v_trunc
 
 def find_n_that_equalizes_values(image_shape):
-    """For an image of height h and width w, h*w is the number of values in
-    this image. A truncated SVD decomposition to rank n of this image will
-    produce matrixes of the following sizes: (h,n), (n,1), (n,w), respectively
-    the left-singular vector matrix, the singular values (later made into a
-    rectangular identity matrix), and the right-singular vector matrix. Summing
-    the values of the SVD matrixes is:
-        h*n + n + n*w = n(h + 1 + w)
+    """For an image of height M and width N, it's bitmap holds M*N values. A
+    truncated SVD decomposition to rank r of this bitmap will produce matrices
+    of the following sizes: (M,r), (r,1), (r,N).
+    Summing the elements of the SVD matrices yields:
 
-    Therefore, for an SVD to be more efficient in storage than the original
-    image, the following must be true
+        M*r + r + r*N = r(M + 1 + N)
 
-        n(h + 1 + w) < h*w
+    Therefore, for an SVD to be more spatially-efficient in storage than the
+    original image, the following must be true:
+
+        r(M + 1 + N) < M*N
         or
-        n < h*w / (h + 1 + w)
+        n < M*N / (M + 1 + N)
 
-    Note that savings are easiest to obtain when h = w (the image is square).
+    Note that savings are easiest to obtain when M = N (the image is square).
     For square-ier images, a higher rank can be specified (which improves image
-    quality) and still beat h*w.  Conversely, very rectangular images require
-    very low ranks (poor quality) to beat h*w in values stored.
+    quality) and still beat M*N.  Conversely, very rectangular images require
+    very low ranks (poor quality) to beat M*N in values stored.
 
     This function produces the minimum rank needed, integer floored, to beat
-    h*w in values stored of an SVD decomposition. Argument image_shape is a
-    tuple of (h, w)."""
+    M*N in values stored of an SVD decomposition. Argument image_shape is a
+    tuple of (M, N)."""
 
-    h, w = image_shape
+    M, N = image_shape
 
-    return math.floor(h * w / (h + 1 + w))
-
-def compose_svd_factors(u, s, v):
-    """Multiply SVD factors: u.s.v. These factors should come from numpy's svd
-    or or svdimg's truncate_svd_factors function."""
-    # build the rectangular diagonal matrix of singular values in s
-    # sing_matrix = np.diag(s)
-    # diff = v.shape[0] - sing_matrix.shape[1]
-    # if diff > 0:
-    #     extra_zero_cols = np.zeros((sing_matrix.shape[0],diff))
-    #     sing_matrix = np.concatenate((sing_matrix, extra_zero_cols), axis=1)
-    if s.ndim > 1:
-        sing_matrix = np.asarray([np.diag(vals) for vals in s])
-        sv = np.asarray([np.dot(s_, v_) for s_, v_ in zip(sing_matrix, v)])
-        usv = np.asarray([np.dot(u_, sv_) for u_, sv_ in zip(u, sv)])
-    else:
-        sing_matrix = np.diag(s)
-        usv = np.dot(u, np.dot(sing_matrix, v))
-    return usv
+    return math.floor(M * N / (M + 1 + N))
 
 def true_one(d):
+    """Of the key-value pairs of dictionary d, return the only pair that has a
+    truthful value. Otherwise, return False."""
     truthy = [(k,v) for k, v in d.items() if v]
     if len(truthy) != 1:
         return False
     return truthy[0]
 
 def get_rank(rank_mode, rank_value, s, image_shape):
+    """Inspect user input to the main function, and return the proper rank.
+
+    rank_mode 'rank' has the user specify the rank explicitly. 'ratiorank'
+    returns a rank of the respective inputted ratio. 'equal' returns the rank
+    described in the function 'find_n_that_equalizes_values'."""
     if rank_mode == 'rank':
         if rank_value != int(rank_value) or rank_value <= 0:
             raise click.ClickException('rank must be an integer > 0')
@@ -204,7 +189,7 @@ def main(input, output, colorspace, rank_mode, ratiorank_mode, equal_mode,
         svd_values += U.size + s.size + V.size
 
     if colorspace == 'L':
-        # put back in 2 dimensions
+        # put back in 2 dimensions for single-band images
         image_data = image_data.reshape(image_data.shape[:2])
         channel_axis=1
     else:
